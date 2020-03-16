@@ -60,7 +60,7 @@ public class MainActivity extends AppCompatActivity {
         applistview.setLayoutManager(layoutManager);
         applistview.setAdapter(listAdapter);
         versionName.setText(BuildConfig.VERSION_NAME);
-        /*ComponentName componentName = new ComponentName(this,NotifyJobService.class);
+        ComponentName componentName = new ComponentName(this,NotifyJobService.class);
         jobInfo=new JobInfo.Builder(1, componentName)
                 .setRequiresCharging(false)
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
@@ -79,7 +79,7 @@ public class MainActivity extends AppCompatActivity {
             Log.d(TAG,"Job scheduled");
         }else{
             Log.d(TAG,"Job scheduled failed");
-        }*/
+        }
 
         et_ip.setText(IPpref.getString("IP",""));
         et_cycletime.setText(IPpref.getString("CYCLE_TIME",""));

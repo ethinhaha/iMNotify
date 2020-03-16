@@ -136,6 +136,10 @@ public class NotifyJobService extends JobService {
                         url="http://"+ip+":8080/imwardServer/getPatientInfo?bedNum=R101A";
                         Log.d(TAG,url);
                         showNotifyIDB(url,data);
+                    }else if(appName.equals("NCKU-APP")){
+                        url="http://"+ip+":8080/imwardServer/getNursing";
+                        Log.d(TAG,url);
+                        showNotifyGet(url,data);
                     }
                     else {
                         Log.d(TAG,url);
@@ -146,6 +150,82 @@ public class NotifyJobService extends JobService {
             }
         }).start();
     }
+
+    private void showNotifyGet(String url,NotifyDao.DataConstract data){
+        final String appNamePOST=data.getAPPNAME();
+        final String appstartPOST="."+data.getAPPSTART();
+        final String apppackagePOST=data.getAPPDOAMIN();
+        SharedPreferences pref=getSharedPreferences("NOTIFY_SETTING",MODE_PRIVATE);
+        int cycletime=Integer.parseInt(pref.getString("CYCLE_TIME","60"))*1000;
+
+        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        Date curDate = new Date(System.currentTimeMillis()) ;
+        String cureTime = formatter.format(curDate);
+        String earlytime=formatter.format(new Date(System.currentTimeMillis()-1000*60*60*24));
+        time_now=pref.getString("MSG_TIME",earlytime);
+        url+="?date="+time_now;
+        time_now=cureTime;
+        Log.d(TAG,url);
+        pref.edit().putString("MSG_TIME",cureTime).commit();
+        JsonObjectRequest jsonObjectRequest=new JsonObjectRequest(Request.Method.GET, url,null, new Response.Listener<JSONObject>() {
+            @Override
+            public void onResponse(JSONObject response) {
+                try{
+                    JSONArray data=response.getJSONArray("data");
+                    ArrayList<IDB_Alert> arrayList=new ArrayList<IDB_Alert>();
+                    for(int i=0;i<data.length();i++){
+                        JSONObject jsonobject = data.getJSONObject(i);
+                        String bedNum = jsonobject.getString("bedNum");
+                        String messageType=jsonobject.getString("messageType");
+                        String message="";
+                        switch(messageType){
+                            case "909":
+                                message="床頭卡低電量";
+                                break;
+                            case "999":
+                                message="緊急呼叫";
+                                break;
+                            case "101":
+                                message="清掃呼叫";
+                                break;
+                            case "103":
+                                message="點滴呼叫";
+                                break;
+                            case "104":
+                                message="護理呼叫";
+                                break;
+                            default:
+                                message="未定義通知";
+                                break;
+                        }
+                        int messageStatus=jsonobject.getInt("messageStatus");
+                        if(messageStatus==0){
+                            IDB_Alert idb_alert=new IDB_Alert();
+                            idb_alert.bedNum=bedNum;
+                            idb_alert.message=message;
+
+                            arrayList.add(idb_alert);
+                        }
+                    }
+                    createNotifyIDB(appNamePOST,arrayList,apppackagePOST,appstartPOST);
+                }catch(JSONException e){
+                    e.printStackTrace();
+                }
+            }
+        }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+
+            }
+        });
+        if(requestQueue==null) {
+            requestQueue = Volley.newRequestQueue(getBaseContext());
+        }
+        jsonObjectRequest.setTag("Notify");
+        requestQueue.add(jsonObjectRequest);
+
+    }
+
     private void showNotifyPost(String url,NotifyDao.DataConstract data){
         final String appNamePOST=data.getAPPNAME();
         final String appstartPOST="."+data.getAPPSTART();
@@ -294,6 +374,49 @@ public class NotifyJobService extends JobService {
         jsonObjectRequest.setTag("Notify");
         requestQueue.add(jsonObjectRequest);
     }
+
+    private void createNotifyIDB(String appname,ArrayList<IDB_Alert> msg,String pkg,String cls){
+        for(int i=0;i<msg.size();i++){
+            NotificationManager mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            Bundle bundle=new Bundle();
+            Intent notifyIntent = new Intent(this, TranslateAcitivity.class);
+            notifyIntent.setFlags( Intent.FLAG_ACTIVITY_NEW_TASK);
+            bundle.putString("pkg",pkg);
+            bundle.putString("cls",pkg+cls);
+            notifyIntent.putExtras(bundle);
+            //notifyIntent.putExtra("pkg","tw.org.cch.www.imrobot");
+            //notifyIntent.putExtra("cls",pkg+cls);
+            PendingIntent appIntent = PendingIntent.getActivity(getBaseContext(), 0, notifyIntent, FLAG_UPDATE_CURRENT);
+            Notification.Builder notification;
+            Log.d(TAG,pkg);
+            notification= new Notification.Builder(getBaseContext())
+                    .setContentIntent(appIntent)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setTicker(appname) // 設置狀態列的顯示的資訊
+                    .setWhen(System.currentTimeMillis())// 設置時間發生時間
+                    .setAutoCancel(true) // 設置通知被使用者點擊後是否清除  //notification.flags = Notification.FLAG_AUTO_CANCEL;
+                    .setContentTitle(appname) // 設置下拉清單裡的標題
+                    .setContentText(msg.get(i).bedNum+"床,"+msg.get(i).message)// 設置上下文內容
+                    .setOngoing(false);      //true使notification變為ongoing，用戶不能手動清除// notification.flags = Notification.FLAG_ONGOING_EVENT; notification.flags = Notification.FLAG_NO_CLEAR;
+            //.setDefaults(Notification.DEFAULT_ALL);
+            if(Build.VERSION.SDK_INT>26){
+                NotificationChannel channel = new NotificationChannel(
+                        appname+i,
+                        appname+i,
+                        NotificationManager.IMPORTANCE_HIGH);
+                channel.setDescription(appname);
+                channel.enableLights(true);
+                channel.enableVibration(true);
+                mNotificationManager.createNotificationChannel(channel);
+                notification.setChannelId(appname+i);
+
+            }
+            Notification notifyBuild= notification.build();
+            //notifyBuild.flags=Notification.FLAG_INSISTENT;
+            notifyBuild.flags=Notification.FLAG_AUTO_CANCEL;
+            mNotificationManager.notify(i, notifyBuild);
+        }
+    }
     private void createNotifyarray(String appname,ArrayList<String> msg,String pkg,String cls){
         for(int i=0;i<msg.size();i++){
             NotificationManager mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
@@ -372,4 +495,9 @@ public class NotifyJobService extends JobService {
             notifyBuild.flags=Notification.FLAG_AUTO_CANCEL;
             mNotificationManager.notify(1, notifyBuild);
         }
+    private class IDB_Alert{
+        String message;
+        String bedNum;
+
+    }
 }
